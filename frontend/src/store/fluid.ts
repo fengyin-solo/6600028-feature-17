@@ -2,6 +2,16 @@ import { defineStore } from 'pinia'
 import { SPHEngine, DEFAULT_PARAMS, PRESETS } from '../utils/sph-engine'
 import type { SimParams, Preset, Particle } from '../types'
 
+interface ResetSnapshot {
+  particles: Particle[]
+  params: SimParams
+  particleCount: number
+  currentPreset: Preset
+  frameCount: number
+  fps: number
+  wasRunning: boolean
+}
+
 export const useFluidStore = defineStore('fluid', {
   state: () => ({
     engine: null as SPHEngine | null,
@@ -15,6 +25,7 @@ export const useFluidStore = defineStore('fluid', {
     _lastTime: 0,
     _fpsAccum: 0,
     _fpsFrames: 0,
+    _snapshot: null as ResetSnapshot | null,
   }),
   getters: {
     particleArray: (state) => state.engine?.particles ?? [],
@@ -27,6 +38,7 @@ export const useFluidStore = defineStore('fluid', {
       if (!state.engine || state.engine.particles.length === 0) return 0
       return Math.max(...state.engine.particles.map(p => Math.sqrt(p.vx * p.vx + p.vy * p.vy)))
     },
+    canUndo: (state) => state._snapshot !== null,
   },
   actions: {
     initSimulation(preset?: Preset) {
@@ -76,8 +88,37 @@ export const useFluidStore = defineStore('fluid', {
       }
     },
     reset() {
+      this._captureSnapshot()
       this.stop()
       this.initSimulation(this.currentPreset)
+    },
+    undoReset() {
+      const snap = this._snapshot
+      if (!snap || !this.engine) return
+      this.params = { ...snap.params }
+      this.particleCount = snap.particleCount
+      this.currentPreset = { ...snap.currentPreset, params: { ...snap.currentPreset.params } }
+      this.frameCount = snap.frameCount
+      this.fps = snap.fps
+      const { width, height } = this.engine
+      this.engine = new SPHEngine(snap.particleCount, width, height, snap.params)
+      this.engine.particles = snap.particles.map(p => ({ ...p }))
+      this._snapshot = null
+      if (snap.wasRunning) {
+        this.start()
+      }
+    },
+    _captureSnapshot() {
+      if (!this.engine) return
+      this._snapshot = {
+        particles: this.engine.particles.map(p => ({ ...p })),
+        params: { ...this.params },
+        particleCount: this.particleCount,
+        currentPreset: { ...this.currentPreset, params: { ...this.currentPreset.params } },
+        frameCount: this.frameCount,
+        fps: this.fps,
+        wasRunning: this.isRunning,
+      }
     },
     stepOnce() {
       if (!this.engine || this.isRunning) return

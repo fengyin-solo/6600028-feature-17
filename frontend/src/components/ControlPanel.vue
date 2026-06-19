@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useFluidStore } from '../store/fluid'
 import { PRESETS } from '../utils/sph-engine'
 import type { Preset } from '../types'
 
 const store = useFluidStore()
+const confirmingReset = ref(false)
 
 function selectPreset(preset: Preset) {
   store.initSimulation(preset)
@@ -17,8 +19,18 @@ function toggleRun() {
   }
 }
 
-function reset() {
+function requestReset() {
+  confirmingReset.value = true
+}
+function confirmReset() {
+  confirmingReset.value = false
   store.reset()
+}
+function cancelReset() {
+  confirmingReset.value = false
+}
+function undoReset() {
+  store.undoReset()
 }
 
 function stepOnce() {
@@ -64,28 +76,64 @@ function onDt(e: Event) {
     </div>
 
     <!-- Controls -->
-    <div class="flex gap-2">
-      <button
-        @click="toggleRun"
-        class="flex-1 py-2 rounded text-sm font-medium transition"
-        :class="store.isRunning
-          ? 'bg-red-600 hover:bg-red-700 text-white'
-          : 'bg-green-600 hover:bg-green-700 text-white'"
+    <div class="flex flex-col gap-2">
+      <div v-if="!confirmingReset" class="flex gap-2">
+        <button
+          @click="toggleRun"
+          class="flex-1 py-2 rounded text-sm font-medium transition"
+          :class="store.isRunning
+            ? 'bg-red-600 hover:bg-red-700 text-white'
+            : 'bg-green-600 hover:bg-green-700 text-white'"
+        >
+          {{ store.isRunning ? '暂停' : '开始' }}
+        </button>
+        <button
+          @click="requestReset"
+          class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-2 rounded text-sm transition"
+        >
+          重置
+        </button>
+        <button
+          @click="stepOnce"
+          :disabled="store.isRunning"
+          class="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-200 py-2 rounded text-sm transition"
+        >
+          单步
+        </button>
+      </div>
+
+      <!-- Reset confirmation -->
+      <div
+        v-else
+        class="flex flex-col gap-2 rounded border border-yellow-600/50 bg-yellow-900/20 p-2"
       >
-        {{ store.isRunning ? '暂停' : '开始' }}
-      </button>
+        <p class="text-xs text-yellow-300 leading-relaxed">
+          确认清空？将移除当前所有粒子与已观察到的模拟结果。
+        </p>
+        <div class="flex gap-2">
+          <button
+            @click="cancelReset"
+            class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-2 rounded text-sm transition"
+          >
+            取消
+          </button>
+          <button
+            @click="confirmReset"
+            class="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white py-2 rounded text-sm font-medium transition"
+          >
+            确认重置
+          </button>
+        </div>
+      </div>
+
+      <!-- Undo reset -->
       <button
-        @click="reset"
-        class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-2 rounded text-sm transition"
+        v-if="store.canUndo"
+        @click="undoReset"
+        class="w-full bg-amber-700 hover:bg-amber-600 text-white py-2 rounded text-sm transition flex items-center justify-center gap-1"
       >
-        重置
-      </button>
-      <button
-        @click="stepOnce"
-        :disabled="store.isRunning"
-        class="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-200 py-2 rounded text-sm transition"
-      >
-        单步
+        <span>↶</span>
+        <span>撤销重置</span>
       </button>
     </div>
 
